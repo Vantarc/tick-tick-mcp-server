@@ -1,0 +1,29 @@
+{
+  "name": "ticktick-mcp-docker",
+  "version": "1.0.0",
+  "description": "TickTick MCP Server - Docker Version (based on jen6/ticktick-mcp)",
+  "type": "module",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "node --watch src/index.js",
+    "health-check": "curl -f http://localhost:8007/health || exit 1"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.15.0",
+    "axios": "^1.6.0",
+    "node-fetch": "^3.3.2"
+  },
+  "keywords": [
+    "mcp",
+    "ticktick",
+    "task-management",
+    "productivity",
+    "docker"
+  ],
+  "author": "Docker MCP System",
+  "license": "MIT",
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
