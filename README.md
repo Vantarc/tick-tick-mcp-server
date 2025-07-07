@@ -195,13 +195,21 @@ echo '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"ticktick_g
 echo '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"ticktick_create_task","arguments":{"title":"API Test","content":"This task should appear in your TickTick app within seconds"}}}' | node src/index.js
 ```
 
-### 🚨 **Known API Issues**
-- **Read Operations**: All GET endpoints return 500 "unknown_exception" errors
-- **Task Creation**: Works but only for specific character sets
-- **Project Listing**: Works perfectly
-- **Task Deletion**: Returns 500 errors (same as read operations)
+### ✅ **BREAKTHROUGH: Task Reading Now Works!**
 
-See [GitHub Issue #1](https://github.com/liadgez/ticktick-mcp-server/issues/1) for detailed analysis.
+**Major Update**: Fixed task reading by using correct endpoint pattern!
+
+**Working Commands**:
+```bash
+# Read specific task (requires both project_id and task_id)
+echo '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"ticktick_get_task_details","arguments":{"project_id":"YOUR_PROJECT_ID","task_id":"YOUR_TASK_ID"}}}' | node src/index.js
+```
+
+### 🚨 **Remaining API Issues**
+- **Task Creation**: Works perfectly (with character limitations below)
+- **Task Reading**: ✅ **FIXED** - Now works with correct endpoint pattern
+- **Project Listing**: Works perfectly
+- **Task Deletion/Updates**: Still return 500 errors (require task reading first)
 
 ## 🧪 Validation & Testing
 

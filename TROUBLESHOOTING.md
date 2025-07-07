@@ -57,26 +57,36 @@ echo '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"ticktick_c
 echo '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"ticktick_create_task","arguments":{"title":"Bad Example","content":"Line 1\nLine 2\nPath: C:\\Users\\folder"}}}' | node src/index.js
 ```
 
-## 🚨 Known API Limitations
+## 🎉 BREAKTHROUGH: Task Reading Fixed!
 
-### Read Operations Failing
-**Problem**: All GET operations return 500 "unknown_exception"
+### ✅ Task Reading Now Works!
+**Solution**: Use correct endpoint pattern with both project_id and task_id
+
 ```bash
-# These commands return API errors:
-echo '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"ticktick_get_tasks","arguments":{}}}' | node src/index.js
-echo '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"ticktick_get_task_details","arguments":{"task_id":"123"}}}' | node src/index.js
+# ✅ WORKING - Read specific task
+echo '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"ticktick_get_task_details","arguments":{"project_id":"YOUR_PROJECT_ID","task_id":"YOUR_TASK_ID"}}}' | node src/index.js
 ```
 
-**Status**: Confirmed TickTick API server-side issue. See [GitHub Issue #1](https://github.com/liadgez/ticktick-mcp-server/issues/1).
+**Key Requirements**:
+- Must provide both `project_id` and `task_id`
+- Use endpoint pattern: `/project/{project_id}/task/{task_id}`
+- Returns full task details with 200 status
 
-**Workaround**: Use TickTick app directly for reading tasks.
+### 🚨 Still Failing Operations
+**Problem**: Update/Delete operations still return 500 errors
+```bash
+# ❌ Still failing:
+echo '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"ticktick_update_task","arguments":{"task_id":"123","title":"Updated"}}}' | node src/index.js
+echo '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"ticktick_delete_task","arguments":{"task_id":"123"}}}' | node src/index.js
+```
 
-### Write Operations Status
+### API Operations Status
 | Operation | Status | Notes |
 |-----------|--------|--------|
 | Create Task | ✅ Works | With character limitations |
 | Create Project | ✅ Works | Fully functional |
-| Update Task | ❌ Fails | 500 errors (read required) |
+| **Read Task Details** | ✅ **FIXED!** | Requires project_id + task_id |
+| Update Task | ❌ Fails | 500 errors |
 | Delete Task | ❌ Fails | 500 errors |
 | Get Projects | ✅ Works | Fully functional |
 

@@ -83,25 +83,21 @@ class TickTickMCPServer {
             }
           },
           {
-            name: 'ticktick_get_tasks',
-            description: 'Get tasks from TickTick',
+            name: 'ticktick_get_task_details',
+            description: 'Get specific task details using project ID and task ID',
             inputSchema: {
               type: 'object',
               properties: {
                 project_id: {
                   type: 'string',
-                  description: 'Filter by project ID'
+                  description: 'Project ID containing the task'
                 },
-                completed: {
-                  type: 'boolean',
-                  description: 'Filter by completion status'
-                },
-                limit: {
-                  type: 'number',
-                  description: 'Maximum number of tasks to return',
-                  default: 50
+                task_id: {
+                  type: 'string',
+                  description: 'Specific task ID to retrieve'
                 }
-              }
+              },
+              required: ['project_id', 'task_id']
             }
           },
           {
@@ -2728,8 +2724,6 @@ class TickTickMCPServer {
             return await this.getProjects(args);
           case 'ticktick_create_project':
             return await this.createProject(args);
-          case 'ticktick_get_tasks':
-            return await this.getTasks(args);
           case 'ticktick_create_task':
             return await this.createTask(args);
           case 'ticktick_update_task':
@@ -3050,36 +3044,37 @@ class TickTickMCPServer {
 
   async getTasks({ project_id, completed, limit = 50 }) {
     try {
-      let endpoint = '/task';
-      const params = new URLSearchParams();
-      
-      if (project_id) params.append('projectId', project_id);
-      if (completed !== undefined) params.append('status', completed ? 2 : 0);
-      params.append('limit', limit);
-      
-      if (params.toString()) {
-        endpoint += `?${params.toString()}`;
-      }
+      // Note: TickTick API doesn't provide a direct "get all tasks in project" endpoint
+      // This method is deprecated in favor of getTaskDetails with specific task IDs
+      throw new Error('getTasks method is deprecated. Use getTaskDetails with specific project_id and task_id, or getProjectData to get project with task information.');
+    } catch (error) {
+      throw new Error(`Failed to get tasks: ${error.message}`);
+    }
+  }
 
-      const tasks = await this.makeTickTickRequest(endpoint);
+  async getTaskDetails({ project_id, task_id }) {
+    try {
+      // Use the correct TickTick API endpoint pattern
+      const endpoint = `/project/${project_id}/task/${task_id}`;
+      const task = await this.makeTickTickRequest(endpoint);
       
       return {
         content: [{
           type: 'text',
-          text: `📝 **TickTick Tasks** (${tasks.length} found):\n\n` +
-                tasks.map(task => 
-                  `**${task.title}** (ID: ${task.id})\n` +
-                  `- Status: ${task.status === 2 ? '✅ Completed' : '⏳ Pending'}\n` +
-                  `- Priority: ${this.getPriorityText(task.priority)}\n` +
-                  `- Project: ${task.projectId}\n` +
-                  `${task.dueDate ? `- Due: ${new Date(task.dueDate).toLocaleDateString()}\n` : ''}` +
-                  `${task.tags && task.tags.length ? `- Tags: ${task.tags.join(', ')}\n` : ''}` +
-                  `- Modified: ${new Date(task.modifiedTime).toLocaleDateString()}\n`
-                ).join('\n')
+          text: `📝 **TickTick Task Details**\n\n` +
+                `**${task.title}** (ID: ${task.id})\n` +
+                `- Status: ${task.status === 2 ? '✅ Completed' : '⏳ Pending'}\n` +
+                `- Priority: ${this.getPriorityText(task.priority)}\n` +
+                `- Project: ${task.projectId}\n` +
+                `${task.content ? `- Content: ${task.content}\n` : ''}` +
+                `${task.dueDate ? `- Due: ${new Date(task.dueDate).toLocaleDateString()}\n` : ''}` +
+                `${task.tags && task.tags.length ? `- Tags: ${task.tags.join(', ')}\n` : ''}` +
+                `- Created: ${new Date(task.createdTime).toLocaleDateString()}\n` +
+                `- Modified: ${new Date(task.modifiedTime).toLocaleDateString()}`
         }]
       };
     } catch (error) {
-      throw new Error(`Failed to get tasks: ${error.message}`);
+      throw new Error(`Failed to get task details: ${error.message}`);
     }
   }
 
@@ -3178,30 +3173,6 @@ class TickTickMCPServer {
     }
   }
 
-  async getTaskDetails({ task_id }) {
-    try {
-      const task = await this.makeTickTickRequest(`/task/${task_id}`);
-      
-      return {
-        content: [{
-          type: 'text',
-          text: `📝 **TickTick Task Details**\n\n` +
-                `**${task.title}**\n\n` +
-                `🆔 **ID**: ${task.id}\n` +
-                `📁 **Project**: ${task.projectId || 'Inbox'}\n` +
-                `🔄 **Status**: ${task.status === 2 ? '✅ Completed' : '⏳ Pending'}\n` +
-                `⚡ **Priority**: ${this.getPriorityText(task.priority)}\n` +
-                `${task.content ? `📖 **Description**: ${task.content}\n` : ''}` +
-                `${task.dueDate ? `📅 **Due Date**: ${new Date(task.dueDate).toLocaleDateString()}\n` : ''}` +
-                `${task.tags && task.tags.length ? `🏷️ **Tags**: ${task.tags.join(', ')}\n` : ''}` +
-                `📅 **Created**: ${new Date(task.createdTime).toLocaleDateString()}\n` +
-                `📅 **Modified**: ${new Date(task.modifiedTime).toLocaleDateString()}`
-        }]
-      };
-    } catch (error) {
-      throw new Error(`Failed to get task details: ${error.message}`);
-    }
-  }
 
   async filterTasks({ keywords, tags, priority, due_before, due_after }) {
     // Note: This is a simplified implementation
@@ -8415,7 +8386,6 @@ class TickTickMCPServer {
     console.log('   📋 PROJECTS & TASKS (8):');
     console.log('   • ticktick_get_projects - List all projects');
     console.log('   • ticktick_create_project - Create new project');
-    console.log('   • ticktick_get_tasks - Get tasks');
     console.log('   • ticktick_create_task - Create new task');
     console.log('   • ticktick_update_task - Update existing task');
     console.log('   • ticktick_delete_task - Delete task');
