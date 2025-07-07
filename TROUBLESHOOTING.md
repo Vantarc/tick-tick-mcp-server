@@ -90,6 +90,79 @@ echo '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"ticktick_d
 | Delete Task | ❌ Fails | 500 errors |
 | Get Projects | ✅ Works | Fully functional |
 
+## 🗂️ Cache Implementation Issues & Solutions
+
+### ✅ NEW: Task Cache System Working!
+
+**Solution**: Implemented local cache system to solve the "give me all tasks" UX problem.
+
+### 🔧 Cache Testing Results
+
+| Feature | Status | Notes |
+|---------|--------|--------|
+| **Task Registration** | ✅ Works | Manual task ID registration to cache |
+| **Cache Persistence** | ✅ Works | File saved to `~/.ticktick-mcp-cache.json` |
+| **Auto-Registration** | ✅ Works | New tasks automatically cached on creation |
+| **Cache Retrieval** | ✅ Works | List all cached tasks with formatting |
+| **CSV Import** | ⚠️ Partial | Requires raw CSV data, not file path |
+
+### 🚨 Common Cache Issues
+
+#### 1. Directory Navigation Problems
+**Problem**: Running MCP commands from wrong directory causes "Cannot find module" errors
+
+```bash
+# ❌ This fails when run from wrong directory:
+echo '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"ticktick_get_cached_tasks","arguments":{}}}' | node src/index.js
+
+# ✅ Use full path instead:
+echo '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"ticktick_get_cached_tasks","arguments":{}}}' | node /Users/liadgez/Documents/mcp-services/ticktick-mcp/src/index.js
+```
+
+#### 2. CSV Import Parameter Confusion
+**Problem**: CSV import expects raw CSV data string, not file path
+
+```bash
+# ❌ This fails - trying to pass file path:
+echo '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"ticktick_import_from_csv","arguments":{"csv_file_path":"path/to/file.csv"}}}' | node src/index.js
+
+# ✅ This works - passing raw CSV data:
+echo '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"ticktick_import_from_csv","arguments":{"csv_data":"task_id,project_id,title\ntask001,project123,Test Task"}}}' | node src/index.js
+```
+
+### 🔧 Working Cache Commands
+
+#### Test Cache Functionality
+```bash
+# 1. Register a task manually
+echo '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"ticktick_register_task_id","arguments":{"task_id":"test123","project_id":"project456","title":"Test Task"}}}' | node /full/path/to/ticktick-mcp/src/index.js
+
+# 2. View all cached tasks
+echo '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"ticktick_get_cached_tasks","arguments":{}}}' | node /full/path/to/ticktick-mcp/src/index.js
+
+# 3. Create task (auto-caches)
+echo '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"ticktick_create_task","arguments":{"title":"Auto Cache Test","project_id":"YOUR_PROJECT_ID"}}}' | node /full/path/to/ticktick-mcp/src/index.js
+```
+
+#### Import CSV Data
+```bash
+# Create CSV data with proper format
+CSV_DATA="task_id,project_id,title
+task001,project123,Design homepage
+task002,project123,Write documentation"
+
+# Import to cache
+echo "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\",\"params\":{\"name\":\"ticktick_import_from_csv\",\"arguments\":{\"csv_data\":\"$CSV_DATA\"}}}" | node /full/path/to/ticktick-mcp/src/index.js
+```
+
+### 💡 Cache Usage Tips
+
+1. **Cache File Location**: `~/.ticktick-mcp-cache.json`
+2. **TTL**: Tasks expire after 24 hours (marked as "stale")
+3. **Auto-Registration**: All new tasks via `ticktick_create_task()` are auto-cached
+4. **Project Filtering**: Use `project_id` parameter in `ticktick_get_cached_tasks()` to filter by project
+5. **CSV Format**: Must include `task_id,project_id,title` columns minimum
+
 ## 📋 Debugging Checklist
 
 ### Task Not Appearing in TickTick App?

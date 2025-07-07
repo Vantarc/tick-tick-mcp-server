@@ -13,6 +13,9 @@ import {
   ErrorCode,
   McpError 
 } from '@modelcontextprotocol/sdk/types.js';
+import fs from 'fs';
+import path from 'path';
+import os from 'os';
 
 // Environment configuration
 const TICKTICK_CLIENT_ID = process.env.TICKTICK_CLIENT_ID;
@@ -20,6 +23,10 @@ const TICKTICK_CLIENT_SECRET = process.env.TICKTICK_CLIENT_SECRET;
 const TICKTICK_TOKEN = process.env.TICKTICK_TOKEN;
 const TICKTICK_ACCESS_TOKEN = process.env.TICKTICK_ACCESS_TOKEN;
 const TICKTICK_AUTH_CODE = process.env.TICKTICK_AUTH_CODE;
+
+// Cache configuration
+const CACHE_FILE_PATH = path.join(os.homedir(), '.ticktick-mcp-cache.json');
+const CACHE_TTL = 24 * 60 * 60 * 1000; // 24 hours in milliseconds
 
 class TickTickMCPServer {
   constructor() {
@@ -35,9 +42,60 @@ class TickTickMCPServer {
       }
     );
     
+    this.initializeCache();
     this.setupHandlers();
   }
 
+  // Cache management methods
+  initializeCache() {
+    try {
+      if (!fs.existsSync(CACHE_FILE_PATH)) {
+        this.saveCache({ tasks: {} });
+      }
+    } catch (error) {
+      console.warn('Failed to initialize cache:', error.message);
+      // Continue without cache if there's an issue
+    }
+  }
+
+  loadCache() {
+    try {
+      if (fs.existsSync(CACHE_FILE_PATH)) {
+        const data = fs.readFileSync(CACHE_FILE_PATH, 'utf8');
+        return JSON.parse(data);
+      }
+    } catch (error) {
+      console.warn('Failed to load cache:', error.message);
+    }
+    return { tasks: {} };
+  }
+
+  saveCache(data) {
+    try {
+      fs.writeFileSync(CACHE_FILE_PATH, JSON.stringify(data, null, 2));
+    } catch (error) {
+      console.warn('Failed to save cache:', error.message);
+    }
+  }
+
+  isTaskStale(task) {
+    if (!task.cached_at) return true;
+    return Date.now() - new Date(task.cached_at) > CACHE_TTL;
+  }
+
+  addTaskToCache(taskId, projectId, title) {
+    try {
+      const cache = this.loadCache();
+      cache.tasks[taskId] = {
+        project_id: projectId,
+        title: title,
+        cached_at: new Date().toISOString()
+      };
+      this.saveCache(cache);
+    } catch (error) {
+      console.warn('Failed to add task to cache:', error.message);
+    }
+  }
 
   setupHandlers() {
     // List available tools
@@ -2705,6 +2763,60 @@ class TickTickMCPServer {
               },
               required: ['reset_type']
             }
+          },
+          {
+            name: 'ticktick_import_from_csv',
+            description: 'Import tasks from CSV data to bootstrap the task cache',
+            inputSchema: {
+              type: 'object',
+              properties: {
+                csv_data: {
+                  type: 'string',
+                  description: 'CSV data with columns: task_id, project_id, title'
+                }
+              },
+              required: ['csv_data']
+            }
+          },
+          {
+            name: 'ticktick_get_cached_tasks',
+            description: 'Get all cached tasks, optionally filtered by project',
+            inputSchema: {
+              type: 'object',
+              properties: {
+                project_id: {
+                  type: 'string',
+                  description: 'Optional project ID to filter tasks'
+                },
+                include_stale: {
+                  type: 'boolean',
+                  description: 'Include stale/expired cached tasks',
+                  default: false
+                }
+              }
+            }
+          },
+          {
+            name: 'ticktick_register_task_id',
+            description: 'Manually register a task ID in the cache for future reading',
+            inputSchema: {
+              type: 'object',
+              properties: {
+                task_id: {
+                  type: 'string',
+                  description: 'Task ID to register'
+                },
+                project_id: {
+                  type: 'string',
+                  description: 'Project ID the task belongs to'
+                },
+                title: {
+                  type: 'string',
+                  description: 'Optional task title for cache metadata'
+                }
+              },
+              required: ['task_id', 'project_id']
+            }
           }
         ]
       };
@@ -2942,6 +3054,12 @@ class TickTickMCPServer {
             return await this.updateSyncSettings(args);
           case 'ticktick_reset_user_data':
             return await this.resetUserData(args);
+          case 'ticktick_import_from_csv':
+            return await this.importFromCsv(args);
+          case 'ticktick_get_cached_tasks':
+            return await this.getCachedTasks(args);
+          case 'ticktick_register_task_id':
+            return await this.registerTaskId(args);
           default:
             throw new McpError(ErrorCode.MethodNotFound, `Unknown tool: ${name}`);
         }
@@ -2987,6 +3105,153 @@ class TickTickMCPServer {
     console.log(`📥 Response Data:`, JSON.stringify(responseData, null, 2));
     
     return responseData;
+  }
+
+  // Cache-based task management methods
+  async importFromCsv({ csv_data }) {
+    try {
+      const lines = csv_data.trim().split('\n');
+      const headers = lines[0].toLowerCase().split(',');
+      
+      // Find column indices
+      const taskIdIndex = headers.findIndex(h => h.includes('task_id') || h.includes('id'));
+      const projectIdIndex = headers.findIndex(h => h.includes('project_id') || h.includes('project'));
+      const titleIndex = headers.findIndex(h => h.includes('title') || h.includes('name'));
+      
+      if (taskIdIndex === -1 || projectIdIndex === -1) {
+        throw new Error('CSV must contain task_id and project_id columns');
+      }
+      
+      const cache = this.loadCache();
+      let importedCount = 0;
+      
+      for (let i = 1; i < lines.length; i++) {
+        const row = lines[i].split(',');
+        if (row.length >= 2) {
+          const taskId = row[taskIdIndex]?.trim();
+          const projectId = row[projectIdIndex]?.trim();
+          const title = titleIndex !== -1 ? row[titleIndex]?.trim() : 'Imported Task';
+          
+          if (taskId && projectId) {
+            cache.tasks[taskId] = {
+              project_id: projectId,
+              title: title || 'Imported Task',
+              cached_at: new Date().toISOString()
+            };
+            importedCount++;
+          }
+        }
+      }
+      
+      this.saveCache(cache);
+      
+      return {
+        content: [{
+          type: 'text',
+          text: `✅ **CSV Import Successful!**\n\n` +
+                `📊 **Import Summary**:\n` +
+                `• **Tasks Imported**: ${importedCount}\n` +
+                `• **Cache Updated**: ${new Date().toLocaleString()}\n` +
+                `• **Total Cached Tasks**: ${Object.keys(cache.tasks).length}\n\n` +
+                `💡 **Next Steps**:\n` +
+                `• Use \`ticktick_get_cached_tasks()\` to see all cached tasks\n` +
+                `• Use \`ticktick_get_task_details(project_id, task_id)\` to read specific tasks\n` +
+                `• Tasks will auto-expire after 24 hours for freshness`
+        }]
+      };
+    } catch (error) {
+      throw new Error(`Failed to import CSV: ${error.message}`);
+    }
+  }
+
+  async getCachedTasks({ project_id, include_stale = false }) {
+    try {
+      const cache = this.loadCache();
+      let tasks = Object.entries(cache.tasks);
+      
+      // Filter by project if specified
+      if (project_id) {
+        tasks = tasks.filter(([_, task]) => task.project_id === project_id);
+      }
+      
+      // Filter out stale tasks unless requested
+      if (!include_stale) {
+        tasks = tasks.filter(([_, task]) => !this.isTaskStale(task));
+      }
+      
+      const freshTasks = tasks.filter(([_, task]) => !this.isTaskStale(task));
+      const staleTasks = tasks.length - freshTasks.length;
+      
+      return {
+        content: [{
+          type: 'text',
+          text: `📋 **Cached Tasks** ${project_id ? `(Project: ${project_id})` : '(All Projects)'}\n\n` +
+                `📊 **Cache Summary**:\n` +
+                `• **Fresh Tasks**: ${freshTasks.length}\n` +
+                `• **Stale Tasks**: ${staleTasks}\n` +
+                `• **Total Tasks**: ${tasks.length}\n\n` +
+                
+                (tasks.length > 0 ? 
+                  `🔍 **Available Tasks**:\n` +
+                  tasks.map(([taskId, task]) => {
+                    const isStale = this.isTaskStale(task);
+                    const staleIcon = isStale ? '⏰' : '✅';
+                    return `${staleIcon} **${task.title}**\n` +
+                           `   📋 Task ID: \`${taskId}\`\n` +
+                           `   📁 Project: ${task.project_id}\n` +
+                           `   📅 Cached: ${new Date(task.cached_at).toLocaleString()}\n` +
+                           `   ${isStale ? '⚠️ *Stale - may need refresh*' : ''}`;
+                  }).join('\n\n') :
+                  `📭 **No tasks found in cache.**\n\n` +
+                  `💡 **To populate cache**:\n` +
+                  `• Use \`ticktick_import_from_csv()\` with exported data\n` +
+                  `• Use \`ticktick_register_task_id()\` for specific tasks\n` +
+                  `• Create tasks via MCP (auto-cached)`
+                ) +
+                
+                `\n\n💡 **Usage Tips**:\n` +
+                `• Use task IDs with \`ticktick_get_task_details(project_id, task_id)\`\n` +
+                `• Fresh tasks are less than 24 hours old\n` +
+                `• Stale tasks may have outdated information`
+        }]
+      };
+    } catch (error) {
+      throw new Error(`Failed to get cached tasks: ${error.message}`);
+    }
+  }
+
+  async registerTaskId({ task_id, project_id, title }) {
+    try {
+      // Try to fetch the actual task to validate and get real title
+      let actualTitle = title || 'Registered Task';
+      try {
+        const taskDetails = await this.makeTickTickRequest(`/project/${project_id}/task/${task_id}`);
+        actualTitle = taskDetails.title || actualTitle;
+      } catch (error) {
+        console.warn('Could not fetch task details for validation:', error.message);
+        // Continue with manual registration even if validation fails
+      }
+      
+      this.addTaskToCache(task_id, project_id, actualTitle);
+      
+      return {
+        content: [{
+          type: 'text',
+          text: `✅ **Task Registered Successfully!**\n\n` +
+                `📋 **Task Details**:\n` +
+                `• **Task ID**: \`${task_id}\`\n` +
+                `• **Project ID**: ${project_id}\n` +
+                `• **Title**: ${actualTitle}\n` +
+                `• **Registered**: ${new Date().toLocaleString()}\n\n` +
+                `💡 **Next Steps**:\n` +
+                `• Use \`ticktick_get_task_details("${project_id}", "${task_id}")\` to read the task\n` +
+                `• Use \`ticktick_get_cached_tasks()\` to see all cached tasks\n` +
+                `• Task will auto-expire after 24 hours for freshness`
+        }]
+      };
+    } catch (error) {
+      throw new Error(`Failed to register task: ${error.message}`);
+    }
   }
 
   async getProjects({ include_archived = false }) {
@@ -3093,6 +3358,9 @@ class TickTickMCPServer {
 
       const task = await this.makeTickTickRequest('/task', 'POST', taskData);
       
+      // Auto-cache the created task
+      this.addTaskToCache(task.id, task.projectId || project_id, task.title);
+      
       return {
         content: [{
           type: 'text',
@@ -3103,7 +3371,8 @@ class TickTickMCPServer {
                 `⚡ **Priority**: ${this.getPriorityText(task.priority)}\n` +
                 `${task.dueDate ? `📅 **Due**: ${new Date(task.dueDate).toLocaleDateString()}\n` : ''}` +
                 `${task.tags && task.tags.length ? `🏷️ **Tags**: ${task.tags.join(', ')}\n` : ''}` +
-                `📅 **Created**: ${new Date(task.createdTime).toLocaleDateString()}`
+                `📅 **Created**: ${new Date(task.createdTime).toLocaleDateString()}\n\n` +
+                `🔄 **Auto-cached for easy retrieval!** Use \`ticktick_get_cached_tasks()\` to see all cached tasks.`
         }]
       };
     } catch (error) {
@@ -3360,7 +3629,23 @@ class TickTickMCPServer {
         }]
       };
     } catch (error) {
-      throw new Error(`Failed to get today's tasks: ${error.message}`);
+      // Provide helpful alternatives when bulk APIs fail
+      const cache = this.loadCache();
+      const cachedTaskCount = Object.keys(cache.tasks).length;
+      
+      return {
+        content: [{
+          type: 'text',
+          text: `❌ **TickTick bulk listing unavailable** (500 error)\n\n` +
+                `💡 **Alternatives to get your tasks**:\n` +
+                `• **Use cache**: \`ticktick_get_cached_tasks()\` (${cachedTaskCount} tasks available)\n` +
+                `• **Import data**: \`ticktick_import_from_csv()\` with exported TickTick data\n` +
+                `• **Register tasks**: \`ticktick_register_task_id(task_id, project_id)\` for specific tasks\n` +
+                `• **Read specific task**: \`ticktick_get_task_details(project_id, task_id)\` if you know the IDs\n\n` +
+                `📋 **Why this happens**: TickTick's bulk task listing API has limitations and often returns 500 errors.\n\n` +
+                `🚀 **Quick solution**: Export your tasks from TickTick app → Import with \`ticktick_import_from_csv()\``
+        }]
+      };
     }
   }
 
@@ -3388,7 +3673,23 @@ class TickTickMCPServer {
         }]
       };
     } catch (error) {
-      throw new Error(`Failed to get overdue tasks: ${error.message}`);
+      // Provide helpful alternatives when bulk APIs fail
+      const cache = this.loadCache();
+      const cachedTaskCount = Object.keys(cache.tasks).length;
+      
+      return {
+        content: [{
+          type: 'text',
+          text: `❌ **TickTick bulk listing unavailable** (500 error)\n\n` +
+                `💡 **Alternatives to get your overdue tasks**:\n` +
+                `• **Use cache**: \`ticktick_get_cached_tasks()\` (${cachedTaskCount} tasks available)\n` +
+                `• **Import data**: \`ticktick_import_from_csv()\` with exported TickTick data\n` +
+                `• **Register tasks**: \`ticktick_register_task_id(task_id, project_id)\` for specific tasks\n` +
+                `• **Read specific task**: \`ticktick_get_task_details(project_id, task_id)\` if you know the IDs\n\n` +
+                `📋 **Why this happens**: TickTick's bulk task listing API has limitations and often returns 500 errors.\n\n` +
+                `🚀 **Quick solution**: Export your tasks from TickTick app → Import with \`ticktick_import_from_csv()\``
+        }]
+      };
     }
   }
 
@@ -3418,7 +3719,23 @@ class TickTickMCPServer {
         }]
       };
     } catch (error) {
-      throw new Error(`Failed to get upcoming tasks: ${error.message}`);
+      // Provide helpful alternatives when bulk APIs fail
+      const cache = this.loadCache();
+      const cachedTaskCount = Object.keys(cache.tasks).length;
+      
+      return {
+        content: [{
+          type: 'text',
+          text: `❌ **TickTick bulk listing unavailable** (500 error)\n\n` +
+                `💡 **Alternatives to get your upcoming tasks**:\n` +
+                `• **Use cache**: \`ticktick_get_cached_tasks()\` (${cachedTaskCount} tasks available)\n` +
+                `• **Import data**: \`ticktick_import_from_csv()\` with exported TickTick data\n` +
+                `• **Register tasks**: \`ticktick_register_task_id(task_id, project_id)\` for specific tasks\n` +
+                `• **Read specific task**: \`ticktick_get_task_details(project_id, task_id)\` if you know the IDs\n\n` +
+                `📋 **Why this happens**: TickTick's bulk task listing API has limitations and often returns 500 errors.\n\n` +
+                `🚀 **Quick solution**: Export your tasks from TickTick app → Import with \`ticktick_import_from_csv()\``
+        }]
+      };
     }
   }
 
