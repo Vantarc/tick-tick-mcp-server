@@ -148,23 +148,76 @@ Built on the Model Context Protocol (MCP) specification:
 - **Error Handling**: Comprehensive try-catch with user-friendly messages
 - **Response Format**: Rich markdown with emojis and structured data
 
-## 🧪 Validation & Testing
+## ⚠️ Critical: TickTick API Sync Limitations
 
-The server includes comprehensive validation tools:
+**IMPORTANT**: TickTick has hidden sync limitations that are not documented in their API. Our extensive testing revealed critical issues:
 
-```bash
-# Run validation suite
-node validate-ticktick-mcp.js
+### 🚫 **Characters That Break Sync**
+Tasks created with these characters will return API success (200) but **WILL NOT appear in TickTick apps**:
 
-# Expected output: 100% success rate (112/112 operations)
+```javascript
+// ❌ THESE BREAK SYNC (avoid in task content):
+"content": "Line 1\nLine 2"           // Actual newlines
+"content": "Path: C:\\Users\\folder"  // Backslashes  
+"content": "Literal \\n in text"     // Escape sequences
+"content": "Quote: \"hello\""        // Escaped quotes in content
 ```
 
-All 112 operations have been tested and validated for:
-- ✅ Tool schema definitions
-- ✅ Request handlers
-- ✅ Method implementations
-- ✅ Error handling
-- ✅ Response formatting
+### ✅ **Characters That Work Perfectly**
+```javascript
+// ✅ THESE ARE SAFE (work perfectly):
+"content": "Emojis work: 💻🚀📊✅❌🔧🎯📁⚡🤖"     // All emojis
+"content": "Arrows: → ← ↑ ↓ ↗ ↖ ↘ ↙"               // All arrows  
+"content": "Bullets: • ○ ■ ▪ ▫ ◦ ‣"                // All bullets
+"content": "Unicode: ñ é ü ç § ± © ® ™"             // All Unicode
+"content": "JSON: { } [ ] and arrays [1,2,3]"      // JSON chars
+"content": "Markdown: # header *bold* **strong**"   // Markdown
+"content": "Quotes work fine in content"            // Regular quotes
+```
+
+### 🔧 **Working Workflow Commands**
+
+#### Create Tasks (Safe Method)
+```bash
+# ✅ WORKING - Basic task creation
+echo '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"ticktick_create_task","arguments":{"title":"My Task","content":"Safe content without newlines or backslashes","project_id":"your_project_id"}}}' | node src/index.js
+
+# ✅ WORKING - With emojis and arrows  
+echo '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"ticktick_create_task","arguments":{"title":"💻 Coding Task","content":"Use arrows for workflow: Plan → Code → Test → Deploy 🚀","project_id":"your_project_id"}}}' | node src/index.js
+```
+
+#### Test Your Setup
+```bash
+# Test if your token works
+echo '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"ticktick_get_projects","arguments":{}}}' | node src/index.js
+
+# Create a test task (should appear in your TickTick app)
+echo '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"ticktick_create_task","arguments":{"title":"API Test","content":"This task should appear in your TickTick app within seconds"}}}' | node src/index.js
+```
+
+### 🚨 **Known API Issues**
+- **Read Operations**: All GET endpoints return 500 "unknown_exception" errors
+- **Task Creation**: Works but only for specific character sets
+- **Project Listing**: Works perfectly
+- **Task Deletion**: Returns 500 errors (same as read operations)
+
+See [GitHub Issue #1](https://github.com/liadgez/ticktick-mcp-server/issues/1) for detailed analysis.
+
+## 🧪 Validation & Testing
+
+```bash
+# Test basic functionality
+node validate-ticktick-mcp.js
+
+# Test character compatibility (recommended before using)
+echo '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"ticktick_create_task","arguments":{"title":"Compatibility Test","content":"Testing safe characters: emojis 💻, arrows →, unicode é, bullets •"}}}' | node src/index.js
+```
+
+**Validation Results:**
+- ✅ Task creation: Works with character limitations
+- ❌ Task reading: API limitation (500 errors)  
+- ✅ Project management: Fully functional
+- ⚠️ Complex operations: Limited by read operation failures
 
 ## 🤝 Contributing
 

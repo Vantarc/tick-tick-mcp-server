@@ -7578,7 +7578,7 @@ class TickTickMCPServer {
                 `• **Priority Focus**: ${result.recommendations?.priorityFocus || 'Maintain current approach'}\n` +
                 `• **Habit Adjustment**: ${result.recommendations?.habitAdjustment || 'Continue current habits'}\n` +
                 `• **Time Management**: ${result.recommendations?.timeManagement || 'Current schedule is working'}\n` +
-                `• **Next Week Goal**: ${result.recommendations?.nextWeekGoal || 'Build on this week\\'s success'}\n\n` +
+                `• **Next Week Goal**: ${result.recommendations?.nextWeekGoal || 'Build on this week\'s success'}\n\n` +
                 
                 (personalization?.tone === 'motivational' ? 
                   `🌟 **Motivational Boost**:\n` +
