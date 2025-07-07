@@ -163,6 +163,20 @@ echo "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\",\"params\":{\"name
 4. **Project Filtering**: Use `project_id` parameter in `ticktick_get_cached_tasks()` to filter by project
 5. **CSV Format**: Must include `task_id,project_id,title` columns minimum
 
+### 🎯 **CRITICAL: Inbox Project ID Discovery**
+
+**Inbox Project ID**: `inbox125308274`
+
+```bash
+# ✅ Reading inbox tasks - WORKING METHOD:
+echo '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"ticktick_get_task_details","arguments":{"project_id":"inbox125308274","task_id":"YOUR_TASK_ID"}}}' | node /full/path/to/ticktick-mcp/src/index.js
+
+# ✅ Create task in inbox (gets inbox project ID automatically):
+echo '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"ticktick_create_task","arguments":{"title":"Test Task","content":"Test content"}}}' | node /full/path/to/ticktick-mcp/src/index.js
+```
+
+**Key Discovery**: Inbox has special project ID `inbox125308274` - not visible in projects list but required for task reading.
+
 ## 📋 Debugging Checklist
 
 ### Task Not Appearing in TickTick App?

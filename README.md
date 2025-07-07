@@ -248,7 +248,12 @@ echo '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"ticktick_c
 ```bash
 # Read specific task (requires both project_id and task_id)
 echo '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"ticktick_get_task_details","arguments":{"project_id":"YOUR_PROJECT_ID","task_id":"YOUR_TASK_ID"}}}' | node src/index.js
+
+# 🎯 CRITICAL: Read inbox tasks (special project ID discovered!)
+echo '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"ticktick_get_task_details","arguments":{"project_id":"inbox125308274","task_id":"YOUR_TASK_ID"}}}' | node src/index.js
 ```
+
+**🔑 Key Discovery**: Inbox has special project ID `inbox125308274` - not visible in projects list but required for reading inbox tasks!
 
 ### ✅ **API Status - FULLY WORKING!**
 - **Task Creation**: ✅ Works perfectly (with character limitations below)
