@@ -143,24 +143,6 @@ class TickTickMCPServer {
             }
           },
           {
-            name: 'ticktick_get_task_details',
-            description: 'Get specific task details using project ID and task ID',
-            inputSchema: {
-              type: 'object',
-              properties: {
-                project_id: {
-                  type: 'string',
-                  description: 'Project ID containing the task'
-                },
-                task_id: {
-                  type: 'string',
-                  description: 'Specific task ID to retrieve'
-                }
-              },
-              required: ['project_id', 'task_id']
-            }
-          },
-          {
             name: 'ticktick_create_task',
             description: 'Create a new task in TickTick',
             inputSchema: {
